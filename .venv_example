@@ -1,0 +1,4 @@
+DATA_DIR=./temp_data
+PRIMARY_CONNECTION_STRING=mongodb://root:example@localhost:27017/
+MONGO_DB_NAME=otodom_test
+USE_MONGO_DICT=y

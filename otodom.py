@@ -1,4 +1,9 @@
-DATA_DIR = f'E:\work\selenium'
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DATA_DIR =  os.getenv('DATA_DIR')
 ADS_DIR = f'{DATA_DIR}/ads'
 ADS_UPDATE_DIR = f'{DATA_DIR}/ads_update'
 EXPIRED_DIR = f'{DATA_DIR}/ads_expired'
@@ -18,6 +23,43 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 import base64
 import re
+
+import pymongo
+PRIMARY_CONNECTION_STRING = os.getenv('PRIMARY_CONNECTION_STRING')
+MONGO_DB_NAME = os.getenv('MONGO_DB_NAME')
+mongo_client = pymongo.MongoClient(PRIMARY_CONNECTION_STRING)
+mongo_db = mongo_client[MONGO_DB_NAME]
+
+USE_MONGO_DICT = ('y' == os.getenv('USE_MONGO_DICT', 'n'))
+class MongoDict:
+
+    def __init__(self, collection, connection_string=PRIMARY_CONNECTION_STRING):
+        self.client = pymongo.MongoClient(connection_string)
+        self.db = self.client[MONGO_DB_NAME]
+        self.collection = self.db[collection]
+        self.collection_key = f'{collection}.public_id' if collection in ['promo', 'up'] else 'ad.publicId'
+        self.collection.create_index({self.collection_key : 1})
+
+    def __getitem__(self, key):
+        list = [x for x in self.collection.find({self.collection_key : key}, {'_id' : 0}).sort({'access_time' : 1})]
+        return list
+    
+    def __len__(self):
+        return self.collection.count_documents({})
+    
+    def __contains__(self, key):
+        return self.collection.find_one({self.collection_key: key}) is not None
+    
+    def __iter__(self):
+        key_path = self.collection_key.split('.')
+        iterator = self.collection.find({}, {'_id' : 0, self.collection_key : 1})
+        return map(lambda x : x[key_path[0]][key_path[1]], iterator)
+    
+    def keys(self):
+        return self.__iter__()
+    
+    def items(self):
+        return map(lambda x : (x, self.__getitem__(x)), self.__iter__())
 
 if not os.path.exists(ADS_DIR):
     os.makedirs(ADS_DIR)
@@ -134,7 +176,7 @@ def read_ads_from_dir(public_id=''):
             data = json.loads(content)
             entry = {'access_time' : access_time,
                         'ad' : data,
-                        'hasCenoskop' : prefix_fun(filename) in other_dir_prefixes,
+                        # 'hasCenoskop' : prefix_fun(filename) in other_dir_prefixes, # obsolete
                         'expired' : directory == EXPIRED_DIR
                         }
         if public_id not in ads:
@@ -147,6 +189,38 @@ def read_ads_from_dir(public_id=''):
     count = len(ads)
     print(f"Loading of {count} ads finished.")
     return ads
+
+def save_document_fs(directory, name, content):
+    if '.json' != name[-5:]:
+        name += '.json'  # add '.json' suffix if not present
+    path = f'{directory}/{name}'
+
+    if not os.path.exists(path):
+        with open(path, 'w') as file:
+                file.write(json.dumps(content))
+
+def save_document_mongo(directory, name, content, key):
+    if '.json' == name[-5:]:
+        name = name[:-5]  # remove '.json' suffix if present
+    if key in ['up', 'promo']:
+        access_time = datetime.fromisoformat('-'.join(name.split('-')[2:]).replace('_', ':'))
+    else:
+        access_time = datetime.fromtimestamp(int(name.split('-')[2]))
+    document = {
+        'access_time' : access_time,
+        'entry_name' : name,
+        key : content
+    }
+    if key == 'ad':
+        document['expired'] = (directory == EXPIRED_DIR)
+    
+    if mongo_db[key].count_documents({'entry_name': document['entry_name']}, limit = 1) > 0:
+        return
+    mongo_db[key].insert_one(document=document)
+
+def save_document(directory, name, content, key):
+    save_document_fs(directory, name, content)
+    save_document_mongo(directory, name, content, key)
 
 def scrape_single(driver, ads, price_updated=False, article_updated=False):
     title = driver.title
@@ -185,43 +259,36 @@ def scrape_single(driver, ads, price_updated=False, article_updated=False):
         if article_updated != modified:
             None # breakpoint position
         if price_updated or article_updated or modified:
-            with open(f'{ADS_UPDATE_DIR}/{ad_id}.json', 'w') as file:
-                file.write(json.dumps(ad))
+            save_document(directory=ADS_UPDATE_DIR, name=ad_id, content=ad, key='ad')
+            if not USE_MONGO_DICT:
                 ads[public_id].append({'access_time' : datetime.now(),
-                            'ad' : ad,
-                            'hasCenoskop' : ads[public_id][-1]['hasCenoskop']  # keep value
+                            'ad' : ad
                             })  # sort not needed as time flows forward
     else:
-        with open(f'{NEXT_DATA_DIR}/{ad_id}.json', 'w') as file:
-            file.write(json.dumps(jsontext))
-        with open(f'{ADS_DIR}/{ad_id}.json', 'w') as file:
-            file.write(json.dumps(ad))
-        ads[public_id] = [{'access_time' : datetime.now(),
-                        'ad' : ad,
-                        'hasCenoskop' : False
-                        }]
+        save_document(directory=NEXT_DATA_DIR, name=ad_id, content=jsontext, key='next_data')
+        if not USE_MONGO_DICT:
+            ads[public_id] = [{'access_time' : datetime.now(),
+                            'ad' : ad
+                            }]
+        save_document(directory=ADS_DIR, name=ad_id, content=ad, key='ad')
     
     if is_expired:
-        with open(f'{EXPIRED_DIR}/{ad_id}.json', 'w') as file:
-            file.write(json.dumps(ad))
+        if not USE_MONGO_DICT:
             ads[public_id].append({'access_time' : datetime.now(),
-                        'ad' : ad,
-                        'hasCenoskop' : ads[public_id][-1]['hasCenoskop']  # keep value
+                        'ad' : ad
                         })  # sort not needed as time flows forward
+        save_document(directory=EXPIRED_DIR, name=ad_id, content=ad, key='ad')
 
     # if len(min_price_value) > 0 and (not ads[public_id][-1]['hasCenoskop'] or price_updated or article_updated):
     if len(min_price_value) > 0:
-        with open(f'{OTHER_DIR}/{ad_id}.json', 'w') as file:
-            other = {
+        other = {
                         "id"        : ad.get('id'),
                         "publicId"  : ad.get('publicId'),
                         "min_price" : min_price_value[0].replace(" zł", "").replace(" ", ""),
                         "max_price" : max_price_value[0].replace(" zł", "").replace(" ", "")
                     }
-            file.write(json.dumps(other))
-        # ads[public_id][-1]['hasCenoskop'] = True
-        for entry in ads[public_id]:
-            entry['hasCenoskop'] = True    
+        save_document(directory=OTHER_DIR, name=ad_id, content=other, key='extra')    
+
         # print("Gathered cenoskop min/max prices.")
     elif not is_expired:
         print("Missing cenoskop min/max prices!")
@@ -251,10 +318,9 @@ def process_promoted(driver):
             }
             # g_promoted.append(entry)
 
-            promo_filename = f"{PROMO_DIR}/promo-{public_id}-{entry['promo_date']}.json"
-            if not os.path.exists(promo_filename):
-                with open(promo_filename, 'w') as file:
-                    file.write(json.dumps(entry))
+            name=f"promo-{public_id}-{entry['promo_date']}"
+            promo_filename = f"{PROMO_DIR}/{name}.json"
+            save_document(directory=PROMO_DIR, name=name, content=entry, key='promo')
         return promoted_article_list
 
 def check_inactive(driver, ads, scan):
@@ -263,7 +329,7 @@ def check_inactive(driver, ads, scan):
     if 'city' in scan:
         city = scan['city']
     else:
-        for candidate in ['poznan', 'wroclaw']:
+        for candidate in ['poznan', 'wroclaw', 'katowice']:
             if candidate in scan['website']:
                 city = candidate
     
@@ -376,10 +442,8 @@ def scrape(driver, ads, extra, g_scan):
                         'public_id' : public_id,
                         'up_datetime' : up_datetime.isoformat()
                     }
-                    up_filename = f'{UPS_DIR}/up-{up_id}.json'
-                    if not os.path.exists(up_filename):
-                        with open(up_filename, 'w') as file:
-                            file.write(json.dumps(up_dict))
+                    name = f"up-{up_id}"
+                    save_document(directory=UPS_DIR, name=name, content=up_dict, key='up')
                 else:
                     up_text = "Nie"
                     up_ind = False
@@ -435,7 +499,7 @@ def scrape(driver, ads, extra, g_scan):
                             continue
                     if price_updated:
                         print(f"--> Nastąpiła zmiana ceny z {prev_price} na {curr_price}!!!")
-                elif not ads[pid][-1]['hasCenoskop'] and time_passed_since_modified > timedelta(days=1) \
+                elif not pid in extra and time_passed_since_modified > timedelta(days=1) \
                     and time_passed_since_accessed > timedelta(hours=2):
                     print(f"Going for cenoskop min/max prices after {time_passed_since_modified}")
                 elif pid in extra and (\
@@ -503,11 +567,18 @@ def otodom_main(driver, website):
     new_counter = 0
     cenoskop_counter = 0
 
-    ads = read_ads_from_dir()
-    extra = read_ads_extra()
+    if USE_MONGO_DICT:
+        print("Using MongoDict for 'ad' and 'extra'")
+        ads = MongoDict('ad')
+        extra = MongoDict('extra')
+        print('Ads:', len(ads))
+        print('Extra:', len(extra))
+    else:
+        ads = read_ads_from_dir()
+        extra = read_ads_extra()
     g_promoted = []  # TBD
 
-    for candidate in ['poznan', 'wroclaw']:
+    for candidate in ['poznan', 'wroclaw', 'katowice']:
                 if candidate in website:
                     city = candidate
     g_scan = {
