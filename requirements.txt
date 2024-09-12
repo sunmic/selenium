@@ -1,0 +1,15 @@
+selenium
+pandas
+matplotlib
+openpyxl
+jupyter
+# jq
+scrapy
+beautifulsoup4
+lxml
+requests
+seaborn
+jsondiff
+streamlit
+selenium_stealth
+undetected_chromedriver
