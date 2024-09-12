@@ -40,6 +40,8 @@ class MongoDict:
         self.collection = self.db[collection]
         self.collection_key = f'{collection}.public_id' if collection in ['promo', 'up'] else 'ad.publicId'
         self.collection.create_index({self.collection_key : 1})
+        self.collection.create_index({'access_time' : 1})  # required for CosmosDB for MongoDB  
+        # https://stackoverflow.com/questions/56988743/using-the-sort-cursor-method-without-the-default-indexing-policy-in-azure-cosm
 
     def __getitem__(self, key):
         list = [x for x in self.collection.find({self.collection_key : key}, {'_id' : 0}).sort({'access_time' : 1})]
