@@ -51,11 +51,11 @@ def read_ads_ups(public_id=''):
                             access_time=access_time,
                             up=data
                         )
-        if public_id not in ups.keys():
+        if public_id not in ups:
             ups[public_id] = []
         ups[public_id].append(entry)
     
-    for public_id in ups.keys():
+    for public_id in ups:
         ups[public_id] = sorted(ups[public_id], key = lambda x : x['access_time'])
     
     return ups
@@ -75,11 +75,11 @@ def read_ads_promo(public_id=''):
                             access_time=access_time,
                             promo=data
                         )
-        if public_id not in promo.keys():
+        if public_id not in promo:
             promo[public_id] = []
         promo[public_id].append(entry)
     
-    for public_id in promo.keys():
+    for public_id in promo:
         promo[public_id] = sorted(promo[public_id], key = lambda x : x['access_time'])
     
     return promo
@@ -99,11 +99,11 @@ def read_ads_extra(public_id=''):
                             access_time=access_time,
                             extra=data
                         )
-        if public_id not in extra.keys():
+        if public_id not in extra:
             extra[public_id] = []
         extra[public_id].append(entry)
     
-    for public_id in extra.keys():
+    for public_id in extra:
         extra[public_id] = sorted(extra[public_id], key = lambda x : x['access_time'])
     
     return extra
@@ -137,14 +137,14 @@ def read_ads_from_dir(public_id=''):
                         'hasCenoskop' : prefix_fun(filename) in other_dir_prefixes,
                         'expired' : directory == EXPIRED_DIR
                         }
-        if public_id not in ads.keys():
+        if public_id not in ads:
             ads[public_id] = []
         ads[public_id].append(entry)
 
-    for public_id in ads.keys():
+    for public_id in ads:
         ads[public_id] = sorted(ads[public_id], key = lambda x : x['access_time'])
     
-    count = len(ads.keys())
+    count = len(ads)
     print(f"Loading of {count} ads finished.")
     return ads
 
@@ -177,7 +177,7 @@ def scrape_single(driver, ads, price_updated=False, article_updated=False):
     public_id = ad.get('publicId')
     ad_id = str(ad.get('id')) + '-' + public_id + '-' + str(int(time.time()))
 
-    if public_id in ads.keys():
+    if public_id in ads:
         None # print(f"Already has basic data for {public_id}")
         prev_date = ads[public_id][-1]['ad']['modifiedAt']
         this_date = ad['modifiedAt']
@@ -260,7 +260,7 @@ def process_promoted(driver):
 def check_inactive(driver, ads, scan):
     assert scan['state'] == 'COMPLETED'
     
-    if 'city' in scan.keys():
+    if 'city' in scan:
         city = scan['city']
     else:
         for candidate in ['poznan', 'wroclaw']:
@@ -415,7 +415,7 @@ def scrape(driver, ads, extra, g_scan):
 
             price_updated = False
             article_updated = False
-            if pid in ads.keys():
+            if pid in ads:
                 prev_price = ads[pid][-1]['ad']['target']['Price']
                 curr_price = article['price']
                 price_updated = prev_price != curr_price
@@ -424,13 +424,13 @@ def scrape(driver, ads, extra, g_scan):
                 ad_as_article = ad_to_article_entry(ads[pid][-1]['ad'])
                 d = diff(ad_as_article, article)
                 del d['address']  # TBD
-                article_updated = len(d.keys()) > 0
+                article_updated = len(d) > 0
                 if article_updated or article_updated:
                     print('--> Wykryto zmiany', d)
-                    if 'title' in d.keys() and not 'url' in d.keys():  # nieistotna zmiana tytułu(?)
+                    if 'title' in d and not 'url' in d:  # nieistotna zmiana tytułu(?)
                         print('Poprzedni tytuł: ' + ad_as_article['title'])
                         del d['title']
-                        if len(d.keys()) == 0:
+                        if len(d) == 0:
                             print('Pomijam nieistotną zmianę w tytule dla ', url)
                             continue
                     if price_updated:
@@ -438,7 +438,7 @@ def scrape(driver, ads, extra, g_scan):
                 elif not ads[pid][-1]['hasCenoskop'] and time_passed_since_modified > timedelta(days=1) \
                     and time_passed_since_accessed > timedelta(hours=2):
                     print(f"Going for cenoskop min/max prices after {time_passed_since_modified}")
-                elif pid in extra.keys() and (\
+                elif pid in extra and (\
                     (extra[pid][-1]['access_time'] < ads[pid][-1]['access_time'] + timedelta(days=2)\
                     and datetime.now() > extra[pid][-1]['access_time'] + timedelta(days=1))\
                     or datetime.now() > extra[pid][-1]['access_time'] + timedelta(days=7)):

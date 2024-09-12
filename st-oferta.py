@@ -37,7 +37,7 @@ def f_geo(public_id, geo=''):
     return any([geo in l['id'] for l in ads[public_id][-1]['ad']['location']['reverseGeocoding']['locations']])
 
 def f_rok_od(public_id):
-    return 'Build_year' in ads[public_id][-1]['ad']['target'].keys() \
+    return 'Build_year' in ads[public_id][-1]['ad']['target'] \
         and int(ads[public_id][-1]['ad']['target']['Build_year']) > 2000
 
 def f_TBS(public_id):
@@ -47,7 +47,7 @@ def f_TBS(public_id):
 def cenoskop_idx(extra=extra, ads=ads, geo='dolnoslaskie/wroclaw/wroclaw/wroclaw'):
     print("Calculating cenoskop_idx")
     idx = []
-    for public_id in extra.keys():
+    for public_id in extra:
         if f_expired(public_id) or f_TBS(public_id) or not \
             (f_geo(public_id, geo) and f_rok_od(public_id)):
             # (f_poznan(public_id) and f_rok_od(public_id)):
@@ -87,7 +87,7 @@ with st.sidebar:
 
 idx = cenoskop_idx(geo=geo)
 url = ''
-if 'url' in st.query_params.keys():
+if 'url' in st.query_params:
     url = st.query_params['url']
 else:
     url = st.text_input("Url:")
@@ -129,13 +129,13 @@ def oto_diff(a, b):
 
     out = diff(a, b)
     
-    if 'ad' in out.keys() and 'userAdverts' in out['ad']:
+    if 'ad' in out and 'userAdverts' in out['ad']:
         del out['ad']['userAdverts']
 
-    if 'ad' in out.keys() and 'target' in out['ad'] and 'Photo' in out['ad']['target']:
+    if 'ad' in out and 'target' in out['ad'] and 'Photo' in out['ad']['target']:
         out['ad']['target']['Photo'] = base64.b64decode(out['ad']['target']['Photo']).decode('utf-8')
 
-    if 'ad' in out.keys() and 'description' in out['ad']:
+    if 'ad' in out and 'description' in out['ad']:
         d0 = BeautifulSoup(a['ad']['description'], 'html.parser').get_text().strip().split('\n')
         d1 = BeautifulSoup(b['ad']['description'], 'html.parser').get_text().strip().split('\n')
 
@@ -153,7 +153,7 @@ def oto_diff(a, b):
 
         out['ad']['description'] = diff_desc
     
-    if 'ad' in out.keys() and 'seo' in out['ad'] and 'description' in out['ad']['seo']:
+    if 'ad' in out and 'seo' in out['ad'] and 'description' in out['ad']['seo']:
         d0 = BeautifulSoup(a['ad']['seo']['description'], 'html.parser').get_text().strip().split('\n')
         d1 = BeautifulSoup(b['ad']['seo']['description'], 'html.parser').get_text().strip().split('\n')
 
@@ -171,7 +171,7 @@ def oto_diff(a, b):
 
         out['ad']['seo']['description'] = diff_desc
     
-    if 'ad' in out.keys() and 'title' in out['ad']:
+    if 'ad' in out and 'title' in out['ad']:
         # d0 = BeautifulSoup(a['ad']['title'], 'html.parser').get_text().strip().split('\n')
         # d1 = BeautifulSoup(b['ad']['title'], 'html.parser').get_text().strip().split('\n')
 
@@ -200,15 +200,15 @@ if url != '':
         public_id = public_id[2:]
 
     ads_for_id = read_ads_from_dir(public_id=public_id)
-    if public_id in ads_for_id.keys() and (not public_id in ads.keys()\
+    if public_id in ads_for_id and (not public_id in ads\
         or len(ads_for_id[public_id]) != len(ads[public_id])):
         print("Updated for ", public_id)
         ads[public_id] = ads_for_id[public_id]
     extra_for_id = read_ads_extra(public_id=public_id)
-    if public_id in extra_for_id.keys():
+    if public_id in extra_for_id:
         extra[public_id] = extra_for_id[public_id]
 
-    if public_id in ads.keys():
+    if public_id in ads:
         ad_list = ads[public_id]
         ad_list_rev = copy.copy(ad_list)
         ad_list_rev.reverse()
@@ -242,7 +242,7 @@ if url != '':
         # st.table(details.transpose())
 
         col1, col2 = st.columns(2)
-        if public_id in extra.keys():
+        if public_id in extra:
             c_min = int(extra[public_id][-1]['extra']['min_price'])
             c_max = int(extra[public_id][-1]['extra']['max_price'])
             cenoskop_idx = (price - c_min)/(c_max - c_min)
@@ -268,7 +268,7 @@ if url != '':
                        ) for entry in ads[public_id]]
         col2.table(price_hist)
         
-        if public_id in extra.keys():
+        if public_id in extra:
             col2.write('Zmiany cenoskopu:')
             cenoskop_hist = [(entry['access_time'],
                             entry['extra']['min_price'],
@@ -330,7 +330,7 @@ if url != '':
         col1, col2 = st.columns(2)
         
         ups = read_ads_ups(public_id=public_id)
-        if public_id in ups.keys():
+        if public_id in ups:
             up_times = [datetime.fromisoformat(up['up']['up_datetime']) for up in ups[public_id]]
             st.write('Podbicia:', len(ups[public_id]))
             st.table(up_times)
@@ -338,7 +338,7 @@ if url != '':
             st.write('Brak podbić')      
 
         promos = read_ads_promo(public_id=public_id)
-        if public_id in promos.keys():
+        if public_id in promos:
             promo_times = [date.fromisoformat(promo['promo']['promo_date']) for promo in promos[public_id]]
             st.write('Promowania:', len(promos[public_id]))
             st.table(promo_times)
@@ -351,7 +351,7 @@ if url != '':
             for (a,b) in zip(reversed(ad_list[:-1]), reversed(ad_list[1:])):
                 st.write('Zmiana z:', datetime.fromisoformat(b['ad']['modifiedAt']).date())
                 d = oto_diff(a, b)
-                if 'ad' in d.keys() and 'target' in d['ad'] and 'Photo' in d['ad']['target']:
+                if 'ad' in d and 'target' in d['ad'] and 'Photo' in d['ad']['target']:
                     st.write('zmiana obrazka')
                     col1, sep, col2 = st.columns([14, 1, 14])
                     import base64
