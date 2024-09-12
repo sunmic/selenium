@@ -14,8 +14,15 @@ def st_read_ads_from_dir():
 def st_read_extra():
     return read_ads_extra()  
 
-ads = st_read_ads_from_dir()
-extra = st_read_extra()
+if not USE_MONGO_DICT:
+    ads = st_read_ads_from_dir()
+    extra = st_read_extra()
+else:
+    print('Using MongoDict for ad, extra, up and promo')
+    ads = MongoDict('ad')
+    extra = MongoDict('extra')
+    ups = MongoDict('up')
+    promos = MongoDict('promo')
 
 def reload_callback():
     st.cache_resource.clear()
@@ -43,7 +50,7 @@ def f_rok_od(public_id):
 def f_TBS(public_id):
     return 'TBS' in ads[public_id][-1]['ad']['description']
 
-@st.cache_resource
+# @st.cache_resource
 def cenoskop_idx(extra=extra, ads=ads, geo='dolnoslaskie/wroclaw/wroclaw/wroclaw'):
     print("Calculating cenoskop_idx")
     idx = []
@@ -199,14 +206,15 @@ if url != '':
     if public_id[:2] == 'ID':
         public_id = public_id[2:]
 
-    ads_for_id = read_ads_from_dir(public_id=public_id)
-    if public_id in ads_for_id and (not public_id in ads\
-        or len(ads_for_id[public_id]) != len(ads[public_id])):
-        print("Updated for ", public_id)
-        ads[public_id] = ads_for_id[public_id]
-    extra_for_id = read_ads_extra(public_id=public_id)
-    if public_id in extra_for_id:
-        extra[public_id] = extra_for_id[public_id]
+    if not USE_MONGO_DICT:  # MongoDict uses online data, no need to refresh
+        ads_for_id = read_ads_from_dir(public_id=public_id)
+        if public_id in ads_for_id and (not public_id in ads\
+            or len(ads_for_id[public_id]) != len(ads[public_id])):
+            print("Updated for ", public_id)
+            ads[public_id] = ads_for_id[public_id]
+        extra_for_id = read_ads_extra(public_id=public_id)
+        if public_id in extra_for_id:
+            extra[public_id] = extra_for_id[public_id]
 
     if public_id in ads:
         ad_list = ads[public_id]
@@ -329,15 +337,19 @@ if url != '':
 
         col1, col2 = st.columns(2)
         
-        ups = read_ads_ups(public_id=public_id)
+        if not USE_MONGO_DICT:
+            ups = read_ads_ups(public_id=public_id)
+            promos = read_ads_promo(public_id=public_id)
+        else:
+            pass # MongoDict for up and promo already defined
+
         if public_id in ups:
             up_times = [datetime.fromisoformat(up['up']['up_datetime']) for up in ups[public_id]]
             st.write('Podbicia:', len(ups[public_id]))
             st.table(up_times)
         else:
             st.write('Brak podbić')      
-
-        promos = read_ads_promo(public_id=public_id)
+        
         if public_id in promos:
             promo_times = [date.fromisoformat(promo['promo']['promo_date']) for promo in promos[public_id]]
             st.write('Promowania:', len(promos[public_id]))

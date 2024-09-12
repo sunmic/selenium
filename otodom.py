@@ -31,6 +31,7 @@ mongo_client = pymongo.MongoClient(PRIMARY_CONNECTION_STRING)
 mongo_db = mongo_client[MONGO_DB_NAME]
 
 USE_MONGO_DICT = ('y' == os.getenv('USE_MONGO_DICT', 'n'))
+
 class MongoDict:
 
     def __init__(self, collection, connection_string=PRIMARY_CONNECTION_STRING):
@@ -60,6 +61,37 @@ class MongoDict:
     
     def items(self):
         return map(lambda x : (x, self.__getitem__(x)), self.__iter__())
+
+USE_HEADLESS_MODE = ('y' == os.getenv('USE_HEADLESS_MODE', 'n'))
+
+def gen_driver(headless=USE_HEADLESS_MODE):
+    if not headless:
+        from selenium import webdriver
+        driver = webdriver.Chrome()
+        return driver
+    else:
+        print("Using HEADLESS mode")
+        # https://stackoverflow.com/questions/68289474/selenium-headless-how-to-bypass-cloudflare-detection-using-selenium
+        import undetected_chromedriver as uc
+        from selenium_stealth import stealth
+        try:
+            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.140 Safari/537.36"
+            chrome_options = uc.ChromeOptions()
+            chrome_options.add_argument('--headless=new')
+            chrome_options.add_argument("--start-maximized")
+            chrome_options.add_argument("user-agent={}".format(user_agent))
+            driver = uc.Chrome(options=chrome_options)
+            stealth(driver,
+                    languages=["en-US", "en"],
+                    vendor="Google Inc.",
+                    platform="Win32",
+                    webgl_vendor="Intel Inc.",
+                    renderer="Intel Iris OpenGL Engine",
+                    fix_hairline=True
+            )
+            return driver
+        except Exception as e:
+            print("Error in Driver: ",e)
 
 if not os.path.exists(ADS_DIR):
     os.makedirs(ADS_DIR)
@@ -422,11 +454,13 @@ def scrape(driver, ads, extra, g_scan):
                 #Try scrape up action date
                 try_no = 0
                 up_text_scraped = False
-                while try_no < 3 and not up_text_scraped:
+                if USE_HEADLESS_MODE:
+                    print("Wyłączone zbieranie podbić z powodu trybu headless")
+                while try_no < 3 and not up_text_scraped and not USE_HEADLESS_MODE:
                     try:
                         try_no = try_no + 1
                         ActionChains(driver).move_to_element(up).perform()
-                        up_text_el = driver.find_element(by=By.XPATH, value='.//*[ contains (text(), "To ogłoszenie zostało podbite" ) ]')
+                        up_text_el = driver.find_element(by=By.XPATH, value='.//*[ contains (text(), "To ogłoszenie zostało podbite" ) ]')  # TBD: Fails in headless mode !!!
                         up_text_scraped = True
                     except Exception as e:
                         print(f"Błąd na próbie #{try_no}", e)
@@ -541,8 +575,9 @@ def otodom_main(driver, website):
     time.sleep(2)
 
     # clicking through the accept cookies button
-    cookies_button = driver.find_element(by=By.XPATH, value='//button[@id="onetrust-accept-btn-handler"]')
-    cookies_button.click()
+    if not USE_HEADLESS_MODE:
+        cookies_button = driver.find_element(by=By.XPATH, value='//button[@id="onetrust-accept-btn-handler"]')
+        cookies_button.click()
 
     time.sleep(2)
 

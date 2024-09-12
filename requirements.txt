@@ -1,15 +1,16 @@
 selenium
 pandas
 matplotlib
-openpyxl
-jupyter
+# openpyxl
+# jupyter
 # jq
-scrapy
+# scrapy
 beautifulsoup4
 lxml
 requests
-seaborn
+# seaborn
 jsondiff
 streamlit
 selenium_stealth
 undetected_chromedriver
+python-dotenv
