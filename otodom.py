@@ -38,7 +38,7 @@ class MongoDict:
         self.client = pymongo.MongoClient(connection_string)
         self.db = self.client[MONGO_DB_NAME]
         self.collection = self.db[collection]
-        self.collection_key = f'{collection}.public_id' if collection in ['promo', 'up'] else '{collection}.publicId'
+        self.collection_key = f'{collection}.public_id' if collection in ['promo', 'up'] else f'{collection}.publicId'
         self.collection.create_index({self.collection_key : 1})
         self.collection.create_index({'access_time' : 1})  # required for CosmosDB for MongoDB  
         # https://stackoverflow.com/questions/56988743/using-the-sort-cursor-method-without-the-default-indexing-policy-in-azure-cosm
