@@ -256,7 +256,8 @@ def save_document(directory, name, content, key):
 
 def scrape_single(driver, ads, price_updated=False, article_updated=False):
     title = driver.title
-    if '404' in title:
+    while '404' in driver.title or 'ERROR' in driver.title:
+        print(driver.title)
         time.sleep(5)
         driver.refresh()
     # scroll down the webpage to get all results
@@ -408,6 +409,10 @@ def ad_to_article_entry(ad):
 
 # define main function
 def scrape(driver, ads, extra, g_scan):
+    while '404' in driver.title or 'ERROR' in driver.title:
+        print(driver.title)
+        time.sleep(5)
+        driver.refresh()
     # scroll down the webpage to get all results
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
     time.sleep(1)
