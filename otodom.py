@@ -38,7 +38,7 @@ class MongoDict:
         self.client = pymongo.MongoClient(connection_string)
         self.db = self.client[MONGO_DB_NAME]
         self.collection = self.db[collection]
-        self.collection_key = f'{collection}.public_id' if collection in ['promo', 'up'] else 'ad.publicId'
+        self.collection_key = f'{collection}.public_id' if collection in ['promo', 'up'] else '{collection}.publicId'
         self.collection.create_index({self.collection_key : 1})
         self.collection.create_index({'access_time' : 1})  # required for CosmosDB for MongoDB  
         # https://stackoverflow.com/questions/56988743/using-the-sort-cursor-method-without-the-default-indexing-policy-in-azure-cosm
@@ -332,6 +332,10 @@ def process_promoted(driver):
         while (len(promoted_l) == 0):
             time.sleep(2)
             print("--> Próba przywrócenia strony z wynikami (refresh/back)")
+            print(driver.current_url)
+            print(driver.title)
+            if 'ERROR' in driver.title:
+                time.sleep(20)
             if 'wyniki' in driver.current_url:
                 driver.refresh()
             else:
@@ -504,6 +508,7 @@ def scrape(driver, ads, extra, g_scan):
             l_articles.append(article_entry)
         except Exception as e:
             print("Błąd w scrape(1):", e , " dla ogłoszenia ", url)
+            print(driver.title)
             continue
     if len(article_list) == 0:
         pass  # wymagana analiza sytuacji
@@ -559,6 +564,7 @@ def scrape(driver, ads, extra, g_scan):
                 print("Błąd w process_promoted()", e, " dla ogłoszenia", url)
         except Exception as e:
             print("Błąd w scrape(2)", e , " dla ogłoszenia", url)
+            print(driver.title)
             continue
 
     # click on the next button
@@ -575,6 +581,10 @@ def otodom_main(driver, website):
     driver.get(website)
 
     time.sleep(2)
+    if 'ERROR' in driver.title:
+        print(driver.current_url)
+        print(driver.title)
+        return
 
     # clicking through the accept cookies button
     if not USE_HEADLESS_MODE:
