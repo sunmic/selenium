@@ -48,15 +48,13 @@ class MongoDict:
         return list
     
     def __len__(self):
-        return self.collection.count_documents({})
+        return len(self.collection.distinct(self.collection_key))
     
     def __contains__(self, key):
         return self.collection.find_one({self.collection_key: key}) is not None
     
     def __iter__(self):
-        key_path = self.collection_key.split('.')
-        iterator = self.collection.find({}, {'_id' : 0, self.collection_key : 1})
-        return map(lambda x : x[key_path[0]][key_path[1]], iterator)
+        return iter(self.collection.distinct(self.collection_key))
     
     def keys(self):
         return self.__iter__()

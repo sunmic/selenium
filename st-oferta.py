@@ -50,7 +50,7 @@ def f_rok_od(public_id):
 def f_TBS(public_id):
     return 'TBS' in ads[public_id][-1]['ad']['description']
 
-# @st.cache_resource
+@st.cache_resource
 def cenoskop_idx(extra=extra, ads=ads, geo='dolnoslaskie/wroclaw/wroclaw/wroclaw'):
     print("Calculating cenoskop_idx")
     idx = []
