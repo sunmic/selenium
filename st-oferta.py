@@ -54,7 +54,11 @@ def f_TBS(public_id):
 def cenoskop_idx(extra=extra, ads=ads, geo='dolnoslaskie/wroclaw/wroclaw/wroclaw'):
     print("Calculating cenoskop_idx")
     idx = []
+    total = len(extra)
+    count = 0
     for public_id in extra:
+        count += 1
+        print(f'{count}/{total}')
         if f_expired(public_id) or f_TBS(public_id) or not \
             (f_geo(public_id, geo) and f_rok_od(public_id)):
             # (f_poznan(public_id) and f_rok_od(public_id)):

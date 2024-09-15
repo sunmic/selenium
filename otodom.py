@@ -241,7 +241,8 @@ def save_document_mongo(directory, name, content, key):
     document = {
         'access_time' : access_time,
         'entry_name' : name,
-        key : content
+        key : content,
+        'directory' : directory.split('/')[-1]
     }
     if key == 'ad':
         document['expired'] = (directory == EXPIRED_DIR)
@@ -370,7 +371,19 @@ def check_inactive(driver, ads, scan):
             if candidate in scan['website']:
                 city = candidate
     
-    city_ids = [k for (k,v) in ads.items() if v[-1]['ad']['target']['City'] == city]
+    if USE_MONGO_DICT:
+        ads.collection.create_index({'ad.target.City' : 1})
+        ads.collection.create_index({'directory' : 1})
+        ads.collection.create_index({'ad.target.City' : 1, 'directory' : 1})
+        city_ids = [ad['ad']['publicId'] for ad in ads.collection.find({'ad.target.City' : city}, 
+                                                                       {'ad.publicId' : 1})]
+        expired_ids = [ad['ad']['publicId'] for ad in ads.collection.find({'ad.target.City' : city,
+                                                                           'directory' : EXPIRED_DIR.split('/')[-1]},
+                                                                           {'ad.publicId' : 1})]
+    else:
+        city_ids = [k for (k,v) in ads.items() if v[-1]['ad']['target']['City'] == city]
+        public_id_fun = lambda x : x.split('-')[1]
+        expired_ids = [public_id_fun(x) for x in os.listdir(EXPIRED_DIR)]
 
     public_id_fun = lambda x : x.split('-')[1]
     expired_ids = [public_id_fun(x) for x in os.listdir(EXPIRED_DIR)]
