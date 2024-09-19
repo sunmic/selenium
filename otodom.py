@@ -283,6 +283,12 @@ def scrape_single(driver, ads, price_updated=False, article_updated=False):
     jsontext = json.loads(all_data)
     ad = jsontext.get('props').get('pageProps').get('ad')
     public_id = ad.get('publicId')
+    if public_id == '':
+        url = ad.get('url')
+        public_id = url.split("-")[-1]
+        assert public_id[:2] == 'ID'
+        public_id = public_id[2:]
+        ad['publicId'] = public_id
     ad_id = str(ad.get('id')) + '-' + public_id + '-' + str(int(time.time()))
 
     if public_id in ads:
