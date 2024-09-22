@@ -79,6 +79,8 @@ def gen_driver(headless=USE_HEADLESS_MODE):
             chrome_options = uc.ChromeOptions()
             chrome_options.add_argument('--headless=new')
             chrome_options.add_argument("--start-maximized")
+            # chrome_options.add_argument("window-size=1920,1080")  # https://stackoverflow.com/questions/48257870/headless-chrome-with-selenium-can-only-find-ways-to-scroll-non-headless
+            # chrome_options.add_argument("--window-size=1920,1080")  # https://www.reddit.com/r/softwaretesting/comments/10sptlf/selenium_not_finding_buttons_while_headless_but/
             chrome_options.add_argument("user-agent={}".format(user_agent))
             driver = uc.Chrome(options=chrome_options)
             stealth(driver,
@@ -484,7 +486,7 @@ def scrape(driver, ads, extra, g_scan):
                 up_text_scraped = False
                 if USE_HEADLESS_MODE:
                     print("Wyłączone zbieranie podbić z powodu trybu headless")
-                while try_no < 3 and not up_text_scraped and not USE_HEADLESS_MODE:
+                while try_no < 3 and not up_text_scraped: # and not USE_HEADLESS_MODE:
                     try:
                         try_no = try_no + 1
                         ActionChains(driver).move_to_element(up).perform()
@@ -566,7 +568,7 @@ def scrape(driver, ads, extra, g_scan):
                     and time_passed_since_accessed > timedelta(hours=2):
                     print(f"Going for cenoskop min/max prices after {time_passed_since_modified}")
                 elif pid in extra and (\
-                    (extra[pid][-1]['access_time'] < ads[pid][-1]['access_time'] + timedelta(days=2)\
+                    (extra[pid][-1]['access_time'] < ads[pid][-1]['ad']['modifiedAt'] + timedelta(days=2)\
                     and datetime.now() > extra[pid][-1]['access_time'] + timedelta(days=1))\
                     or datetime.now() > extra[pid][-1]['access_time'] + timedelta(days=7)):
                     time_since_cenoskop_accessed = datetime.now() - extra[pid][-1]['access_time']
