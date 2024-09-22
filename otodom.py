@@ -567,12 +567,16 @@ def scrape(driver, ads, extra, g_scan):
                 elif not pid in extra and time_passed_since_modified > timedelta(days=1) \
                     and time_passed_since_accessed > timedelta(hours=2):
                     print(f"Going for cenoskop min/max prices after {time_passed_since_modified}")
-                elif pid in extra and (\
-                    (extra[pid][-1]['access_time'] < datetime.fromisoformat(ads[pid][-1]['ad']['modifiedAt']) + timedelta(days=2)\
-                    and datetime.now() > extra[pid][-1]['access_time'] + timedelta(days=1))\
-                    or datetime.now() > extra[pid][-1]['access_time'] + timedelta(days=7)):
-                    time_since_cenoskop_accessed = datetime.now() - extra[pid][-1]['access_time']
-                    print(f'Refreshing cenoskop data after {time_since_cenoskop_accessed}')
+                elif pid in extra:
+                    extra_access_time = extra[pid][-1]['access_time']
+                    if not extra_access_time.tzinfo:
+                        extra_access_time = datetime.fromisoformat(extra_access_time.isoformat() + '+02:00')
+                    if (\
+                    (extra_access_time < datetime.fromisoformat(ads[pid][-1]['ad']['modifiedAt']) + timedelta(days=2)\
+                    and datetime.now(tz=zoneinfo.ZoneInfo("Poland")) > extra_access_time + timedelta(days=1))\
+                    or datetime.now(tz=zoneinfo.ZoneInfo("Poland")) > extra_access_time + timedelta(days=7)):
+                        time_since_cenoskop_accessed = datetime.now(tz=zoneinfo.ZoneInfo("Poland")) - extra_access_time
+                        print(f'Refreshing cenoskop data after {time_since_cenoskop_accessed}')
                 else:
                     print("Skipping url " + url)
                     continue
