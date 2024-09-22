@@ -486,7 +486,7 @@ def scrape(driver, ads, extra, g_scan):
                 up_text_scraped = False
                 if USE_HEADLESS_MODE:
                     print("Wyłączone zbieranie podbić z powodu trybu headless")
-                while try_no < 3 and not up_text_scraped: # and not USE_HEADLESS_MODE:
+                while try_no < 3 and not up_text_scraped and not USE_HEADLESS_MODE:
                     try:
                         try_no = try_no + 1
                         ActionChains(driver).move_to_element(up).perform()
