@@ -568,7 +568,7 @@ def scrape(driver, ads, extra, g_scan):
                     and time_passed_since_accessed > timedelta(hours=2):
                     print(f"Going for cenoskop min/max prices after {time_passed_since_modified}")
                 elif pid in extra and (\
-                    (extra[pid][-1]['access_time'] < ads[pid][-1]['ad']['modifiedAt'] + timedelta(days=2)\
+                    (extra[pid][-1]['access_time'] < datetime.fromisoformat(ads[pid][-1]['ad']['modifiedAt']) + timedelta(days=2)\
                     and datetime.now() > extra[pid][-1]['access_time'] + timedelta(days=1))\
                     or datetime.now() > extra[pid][-1]['access_time'] + timedelta(days=7)):
                     time_since_cenoskop_accessed = datetime.now() - extra[pid][-1]['access_time']
