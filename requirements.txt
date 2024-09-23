@@ -16,4 +16,5 @@ undetected_chromedriver
 python-dotenv
 streamlit-carousel
 pymongo
+setuptools # https://stackoverflow.com/questions/77247893/modulenotfounderror-no-module-named-distutils-in-python-3-12
 

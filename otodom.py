@@ -577,6 +577,9 @@ def scrape(driver, ads, extra, g_scan):
                     or datetime.now(tz=zoneinfo.ZoneInfo("Poland")) > extra_access_time + timedelta(days=7)):
                         time_since_cenoskop_accessed = datetime.now(tz=zoneinfo.ZoneInfo("Poland")) - extra_access_time
                         print(f'Refreshing cenoskop data after {time_since_cenoskop_accessed}')
+                    else:
+                        print("Skipping url " + url)
+                        continue    
                 else:
                     print("Skipping url " + url)
                     continue
