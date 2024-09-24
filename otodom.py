@@ -259,7 +259,7 @@ def save_document(directory, name, content, key):
 
 def scrape_single(driver, ads, price_updated=False, article_updated=False):
     title = driver.title
-    while '404' in driver.title[:40] or 'ERROR' in driver.title:
+    while '404' in driver.title[:40] or 'ERROR' in driver.title or 'Przerwa techniczna' in driver.title:
         print(driver.title)
         time.sleep(20)
         driver.refresh()
@@ -342,7 +342,7 @@ def process_promoted(driver):
             print("--> Próba przywrócenia strony z wynikami (refresh/back)")
             print(driver.current_url)
             print(driver.title)
-            if 'ERROR' in driver.title:
+            if 'ERROR' in driver.title or 'Przerwa techniczna' in driver.title:
                 time.sleep(20)
             if 'wyniki' in driver.current_url:
                 driver.refresh()
@@ -430,7 +430,7 @@ def ad_to_article_entry(ad):
 
 # define main function
 def scrape(driver, ads, extra, g_scan):
-    while '404' in driver.title[:40] or 'ERROR' in driver.title:
+    while '404' in driver.title[:40] or 'ERROR' in driver.title or 'Przerwa techniczna' in driver.title:
         print(driver.title)
         time.sleep(20)
         driver.refresh()
@@ -570,7 +570,7 @@ def scrape(driver, ads, extra, g_scan):
                 elif pid in extra:
                     extra_access_time = extra[pid][-1]['access_time']
                     if not extra_access_time.tzinfo:
-                        extra_access_time = datetime.fromisoformat(extra_access_time.isoformat() + '+02:00')
+                        extra_access_time = datetime.fromisoformat(extra_access_time.isoformat() + '+00:00')
                     if (\
                     (extra_access_time < datetime.fromisoformat(ads[pid][-1]['ad']['modifiedAt']) + timedelta(days=2)\
                     and datetime.now(tz=zoneinfo.ZoneInfo("Poland")) > extra_access_time + timedelta(days=1))\
