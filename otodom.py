@@ -402,13 +402,19 @@ def check_inactive(driver, ads, scan):
 
     inactive_urls = [ads[id][-1]['ad']['url'] for id in inactive_ids]
     for num, url in enumerate(inactive_urls):
-        process_promoted(driver)
-        print(f"[{num+1}/{total}]Following inactive", url)
-        driver.get(url)
-        time.sleep(1)
-        scrape_single(driver=driver, ads=ads)
-        driver.back()
-        time.sleep(1)
+        try:
+            process_promoted(driver)
+        except Exception as e:
+            print(f"Błąd w process_promoted()", e)
+        try:
+            print(f"[{num+1}/{total}]Following inactive", url)
+            driver.get(url)
+            time.sleep(1)
+            scrape_single(driver=driver, ads=ads)
+            driver.back()
+            time.sleep(1)
+        except Exception as e:
+            print(f"Błąd w check_inactive()", e)
     process_promoted(driver)
 
 def ad_to_article_entry(ad):
