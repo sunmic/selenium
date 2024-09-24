@@ -442,8 +442,16 @@ def scrape(driver, ads, extra, g_scan):
 
     organic = driver.find_elements(by=By.XPATH, value='//div[@data-cy="search.listing.organic"]')[0]
     organic_article_list = organic.find_elements(by=By.XPATH, value='.//article[@data-cy="listing-item"]')
+
+    external = driver.find_elements(by=By.XPATH, value='//div[@data-cy="search.listing"]')
+    if len(external) > 0:
+        external_article_list = external[0].find_elements(by=By.XPATH, value='.//article[@data-cy="listing-item"]')
+        len_external = len(external_article_list)
+    else:
+        len_external = 0
+
     article_list = driver.find_elements(by=By.XPATH, value='//article[@data-cy="listing-item"]')
-    assert len(article_list) == len(promoted_article_list) + len(organic_article_list)
+    assert len(article_list) == len(promoted_article_list) + len(organic_article_list) + len_external
 
     l_articles = []
     for article in article_list:
