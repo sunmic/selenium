@@ -436,7 +436,7 @@ def check_inactive(driver, ads, scan):
             time.sleep(1)
         except Exception as e:
             print(f"Błąd w check_inactive()", e)
-    process_promoted(driver)
+    # process_promoted(driver)
 
 def ad_to_article_entry(ad):
     return {
