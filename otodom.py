@@ -412,12 +412,17 @@ def check_inactive(driver, ads, scan):
         expired_ids = [ad['ad']['publicId'] for ad in ads.collection.find({'ad.target.City' : city,
                                                                            'directory' : EXPIRED_DIR.split('/')[-1]},
                                                                            {'ad.publicId' : 1})]
+        primary_ids = [ad['ad']['publicId'] for ad in ads.collection.find({'ad.target.City' : city,
+                                                                           'ad.market' : 'PRIMARY'
+                                                                           }, 
+                                                                       {'ad.publicId' : 1})]
     else:
         city_ids = [k for (k,v) in ads.items() if v[-1]['ad']['target']['City'] == city]
         public_id_fun = lambda x : x.split('-')[1]
         expired_ids = [public_id_fun(x) for x in os.listdir(EXPIRED_DIR)]
+        primary_ids = [k for (k,v) in ads.items() if v[-1]['ad']['target']['City'] == city and v[-1]['ad']['market'] == 'PRIMARY']
 
-    inactive_ids = list(set(city_ids) - set(scan['seen_ids']) - set(expired_ids))
+    inactive_ids = list(set(city_ids) - set(scan['seen_ids']) - set(expired_ids) - set(primary_ids))
     total = len(inactive_ids)
     print('Nieaktywnych ogłoszeń do sprawdzenia:', total)
 
