@@ -14,7 +14,7 @@ PROMO_DIR = f'{DATA_DIR}/promo'
 SCAN_DIR = f'{DATA_DIR}/scan'
 
 import os
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 import json
 import time
 import zoneinfo
@@ -125,7 +125,9 @@ def read_ads_ups(public_id=''):
             data = json.loads(file.read())
             entry = dict(
                             access_time=access_time,
-                            up=data
+                            up=data,
+                            entry_name=filename[:-5] if '.json' == filename[-5:] else filename,
+                            directory=UPS_DIR.split('/')[-1]
                         )
         if public_id not in ups:
             ups[public_id] = []
@@ -149,7 +151,9 @@ def read_ads_promo(public_id=''):
             data = json.loads(file.read())
             entry = dict(
                             access_time=access_time,
-                            promo=data
+                            promo=data,
+                            entry_name=filename[:-5] if '.json' == filename[-5:] else filename,
+                            directory=PROMO_DIR.split('/')[-1]
                         )
         if public_id not in promo:
             promo[public_id] = []
@@ -160,7 +164,7 @@ def read_ads_promo(public_id=''):
     
     return promo
 
-def read_ads_extra(public_id=''):
+def read_ads_extra(public_id='', tz=datetime.now(timezone.utc).astimezone().tzinfo):
     extra = {}
 
     files = [file for file in os.listdir(OTHER_DIR) if public_id in file]
@@ -168,12 +172,14 @@ def read_ads_extra(public_id=''):
     
     for filename in files:
         public_id = public_id_fun(filename)
-        access_time = datetime.fromtimestamp(int(filename[:-5].split('-')[2]))
+        access_time = datetime.fromtimestamp(int(filename[:-5].split('-')[2]), tz=tz)
         with open(f'{OTHER_DIR}/{filename}', 'r') as file:
             data = json.loads(file.read())
             entry = dict(
                             access_time=access_time,
-                            extra=data
+                            extra=data,
+                            entry_name=filename[:-5] if '.json' == filename[-5:] else filename,
+                            directory=OTHER_DIR.split('/')[-1]
                         )
         if public_id not in extra:
             extra[public_id] = []
@@ -185,7 +191,7 @@ def read_ads_extra(public_id=''):
     return extra
 
 
-def read_ads_from_dir(public_id=''):
+def read_ads_from_dir(public_id='', tz=datetime.now(timezone.utc).astimezone().tzinfo):
     print("Loading ads from directory.")
     ads = {}
     ad_files = [file for file in os.listdir(ADS_DIR) if public_id in file]
@@ -203,13 +209,15 @@ def read_ads_from_dir(public_id=''):
 
     for (filename, directory) in ad_files_and_dirs:
         public_id = filename[:-5].split('-')[1]
-        access_time = datetime.fromtimestamp(int(filename[:-5].split('-')[2]))
+        access_time = datetime.fromtimestamp(int(filename[:-5].split('-')[2]), tz=tz)
         prefix_fun = lambda x : '-'.join(x.split('-')[:2])
         with open(f"{directory}/{filename}", 'r') as file:
             content = file.read()
             data = json.loads(content)
             entry = {'access_time' : access_time,
                         'ad' : data,
+                        'entry_name' : filename[:-5] if '.json' == filename[-5:] else filename,
+                        'directory' : directory.split('/')[-1],
                         # 'hasCenoskop' : prefix_fun(filename) in other_dir_prefixes, # obsolete
                         'expired' : directory == EXPIRED_DIR
                         }
@@ -233,13 +241,13 @@ def save_document_fs(directory, name, content):
         with open(path, 'w') as file:
                 file.write(json.dumps(content))
 
-def save_document_mongo(directory, name, content, key):
+def save_document_mongo(directory, name, content, key, tz=datetime.now(timezone.utc).astimezone().tzinfo):
     if '.json' == name[-5:]:
         name = name[:-5]  # remove '.json' suffix if present
     if key in ['up', 'promo']:
         access_time = datetime.fromisoformat('-'.join(name.split('-')[2:]).replace('_', ':'))
     else:
-        access_time = datetime.fromtimestamp(int(name.split('-')[2]))
+        access_time = datetime.fromtimestamp(int(name.split('-')[2]), tz=tz)
     document = {
         'access_time' : access_time,
         'entry_name' : name,
@@ -250,6 +258,8 @@ def save_document_mongo(directory, name, content, key):
         document['expired'] = (directory == EXPIRED_DIR)
     
     if mongo_db[key].count_documents({'entry_name': document['entry_name']}, limit = 1) > 0:
+        return
+    if key=='ad' and mongo_db[key].count_documents({'ad.publicId': document['ad']['publicId'], 'ad.modifiedAt' : document['ad']['modifiedAt']}, limit = 1) > 0:
         return
     mongo_db[key].insert_one(document=document)
 
@@ -392,9 +402,6 @@ def check_inactive(driver, ads, scan):
         city_ids = [k for (k,v) in ads.items() if v[-1]['ad']['target']['City'] == city]
         public_id_fun = lambda x : x.split('-')[1]
         expired_ids = [public_id_fun(x) for x in os.listdir(EXPIRED_DIR)]
-
-    public_id_fun = lambda x : x.split('-')[1]
-    expired_ids = [public_id_fun(x) for x in os.listdir(EXPIRED_DIR)]
 
     inactive_ids = list(set(city_ids) - set(scan['seen_ids']) - set(expired_ids))
     total = len(inactive_ids)
