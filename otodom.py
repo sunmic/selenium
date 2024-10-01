@@ -265,7 +265,17 @@ def save_document_mongo(directory, name, content, key, tz=datetime.now(timezone.
                                                     }
                                                    , limit = 1) > 0:
         return
-    mongo_db[key].insert_one(document=document)
+    
+    inserted = False
+    while not inserted:
+        try:
+            mongo_db[key].insert_one(document=document)
+            inserted = True
+        except Exception as e:
+            print('Błąd przy zapisywaniu dokumentu', e)
+            # assert RetryAfterMs in e.reason/details 
+            time.sleep(1)
+            print('Ponawiam zapis')
 
 def save_document(directory, name, content, key):
     save_document_fs(directory, name, content)
