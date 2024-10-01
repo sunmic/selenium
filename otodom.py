@@ -255,11 +255,15 @@ def save_document_mongo(directory, name, content, key, tz=datetime.now(timezone.
         'directory' : directory.split('/')[-1]
     }
     if key == 'ad':
-        document['expired'] = (directory == EXPIRED_DIR)
+        document['expired'] = (directory.split('/')[-1] == EXPIRED_DIR.split('/')[-1])
     
     if mongo_db[key].count_documents({'entry_name': document['entry_name']}, limit = 1) > 0:
         return
-    if key=='ad' and mongo_db[key].count_documents({'ad.publicId': document['ad']['publicId'], 'ad.modifiedAt' : document['ad']['modifiedAt']}, limit = 1) > 0:
+    if key=='ad' and mongo_db[key].count_documents({'ad.publicId': document['ad']['publicId'], 
+                                                    'ad.modifiedAt' : document['ad']['modifiedAt'],
+                                                    'directory' : document['directory']
+                                                    }
+                                                   , limit = 1) > 0:
         return
     mongo_db[key].insert_one(document=document)
 
@@ -409,16 +413,16 @@ def check_inactive(driver, ads, scan):
 
     inactive_urls = [ads[id][-1]['ad']['url'] for id in inactive_ids]
     for num, url in enumerate(inactive_urls):
-        try:
-            process_promoted(driver)
-        except Exception as e:
-            print(f"Błąd w process_promoted()", e)
+        # try:
+        #     process_promoted(driver)
+        # except Exception as e:
+        #     print(f"Błąd w process_promoted()", e)
         try:
             print(f"[{num+1}/{total}]Following inactive", url)
             driver.get(url)
             time.sleep(1)
             scrape_single(driver=driver, ads=ads)
-            driver.back()
+            # driver.back()
             time.sleep(1)
         except Exception as e:
             print(f"Błąd w check_inactive()", e)
