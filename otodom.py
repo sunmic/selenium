@@ -32,6 +32,44 @@ mongo_db = mongo_client[MONGO_DB_NAME]
 
 USE_MONGO_DICT = ('y' == os.getenv('USE_MONGO_DICT', 'n'))
 
+def handle_cosmos_throttling(lambda_function):
+    import inspect
+    repeat = True
+    while repeat:
+        try:
+            return_value = lambda_function()
+            lastRequestStatistics = mongo_db.command({"getLastRequestStatistics": 1})
+            if lastRequestStatistics["RequestCharge"] > 12:
+                print(inspect.getsource(lambda_function))
+                print("Last RU Consume:", lastRequestStatistics["RequestCharge"])
+            return return_value
+        
+        except Exception as e:
+            print('Błąd przy wykonywaniu przekazanej funkcji:')
+            print(inspect.getsource(lambda_function).strip())
+            print('Szczegóły: ', e)
+            details = e.details
+            if details['codeName'] == 'RequestRateTooLarge':
+                errmsg = details['errmsg']
+                assert 'RetryAfterMs' in errmsg
+                retryAfterMs = errmsg.split(',')[1].strip().split('=')
+                assert retryAfterMs[0] == 'RetryAfterMs'
+                sleep_val = int(retryAfterMs[1]) / 1000.0
+                time.sleep(sleep_val)
+            else:
+                raise
+            print('Ponawiam wykonanie przekazanej funkcji')
+
+
+handle_cosmos_throttling(lambda : mongo_db['ad'].create_index({'entry_name' : 1}))
+handle_cosmos_throttling(lambda : mongo_db['ad'].create_index({'ad.publicId' : 1}))
+handle_cosmos_throttling(lambda : mongo_db['ad'].create_index({'ad.modifiedAt' : 1}))
+handle_cosmos_throttling(lambda : mongo_db['ad'].create_index({'directory' : 1}))
+
+for key in ['promo', 'extra', 'up', 'next_data']:
+    handle_cosmos_throttling(lambda : mongo_db[key].create_index({'entry_name' : 1}))
+
+
 class MongoDict:
 
     def __init__(self, collection, connection_string=PRIMARY_CONNECTION_STRING):
@@ -39,22 +77,23 @@ class MongoDict:
         self.db = self.client[MONGO_DB_NAME]
         self.collection = self.db[collection]
         self.collection_key = f'{collection}.public_id' if collection in ['promo', 'up'] else f'{collection}.publicId'
-        self.collection.create_index({self.collection_key : 1})
-        self.collection.create_index({'access_time' : 1})  # required for CosmosDB for MongoDB  
+        handle_cosmos_throttling(lambda : self.collection.create_index({self.collection_key : 1}))
+        handle_cosmos_throttling(lambda : self.collection.create_index({'access_time' : 1}))  # required for sorting in CosmosDB for MongoDB  
         # https://stackoverflow.com/questions/56988743/using-the-sort-cursor-method-without-the-default-indexing-policy-in-azure-cosm
 
     def __getitem__(self, key):
-        list = [x for x in self.collection.find({self.collection_key : key}, {'_id' : 0}).sort({'access_time' : 1})]
+        list = [x for x in handle_cosmos_throttling(lambda : self.collection.find({self.collection_key : key}, {'_id' : 0})).sort({'access_time' : 1})]
         return list
     
     def __len__(self):
-        return len(self.collection.distinct(self.collection_key))
+        return len(handle_cosmos_throttling(lambda : self.collection.distinct(self.collection_key)))
     
     def __contains__(self, key):
-        return self.collection.find_one({self.collection_key: key}) is not None
+        # return handle_cosmos_throttling(lambda : self.collection.find_one({self.collection_key: key})) is not None
+        return handle_cosmos_throttling(lambda : self.collection.count_documents({self.collection_key: key}, limit=1)) > 0
     
     def __iter__(self):
-        return iter(self.collection.distinct(self.collection_key))
+        return iter(handle_cosmos_throttling(lambda : self.collection.distinct(self.collection_key)))
     
     def keys(self):
         return self.__iter__()
@@ -257,25 +296,19 @@ def save_document_mongo(directory, name, content, key, tz=datetime.now(timezone.
     if key == 'ad':
         document['expired'] = (directory.split('/')[-1] == EXPIRED_DIR.split('/')[-1])
     
-    if mongo_db[key].count_documents({'entry_name': document['entry_name']}, limit = 1) > 0:
-        return
-    if key=='ad' and mongo_db[key].count_documents({'ad.publicId': document['ad']['publicId'], 
-                                                    'ad.modifiedAt' : document['ad']['modifiedAt'],
-                                                    'directory' : document['directory']
-                                                    }
-                                                   , limit = 1) > 0:
+    if handle_cosmos_throttling(lambda : mongo_db[key].count_documents({'entry_name': document['entry_name']}, limit = 1)) > 0:
         return
     
-    inserted = False
-    while not inserted:
-        try:
-            mongo_db[key].insert_one(document=document)
-            inserted = True
-        except Exception as e:
-            print('Błąd przy zapisywaniu dokumentu', e)
-            # assert RetryAfterMs in e.reason/details 
-            time.sleep(1)
-            print('Ponawiam zapis')
+    if key=='ad':
+        count_filter = {
+                        'ad.publicId': document['ad']['publicId'], 
+                        'ad.modifiedAt' : document['ad']['modifiedAt'],
+                        'directory' : document['directory']
+                        }
+        if  handle_cosmos_throttling(lambda : mongo_db[key].count_documents(filter=count_filter, limit = 1)) > 0:
+            return
+        
+    handle_cosmos_throttling(lambda : mongo_db[key].insert_one(document=document))
 
 def save_document(directory, name, content, key):
     save_document_fs(directory, name, content)
@@ -629,10 +662,10 @@ def scrape(driver, ads, extra, g_scan):
             scrape_single(driver=driver, ads=ads, price_updated=price_updated, article_updated=article_updated)
             driver.back()
             time.sleep(2)
-            try:
-                process_promoted(driver)
-            except Exception as e:
-                print("Błąd w process_promoted()", e, " dla ogłoszenia", url)
+            # try:
+            #     process_promoted(driver)
+            # except Exception as e:
+            #     print("Błąd w process_promoted()", e, " dla ogłoszenia", url)
         except Exception as e:
             print("Błąd w scrape(2)", e , " dla ogłoszenia", url)
             print(driver.title)
