@@ -502,24 +502,34 @@ def ad_to_article_entry(ad):
 
 # define main function
 def scrape(driver, ads, extra, g_scan, page_no):
-    while '404' in driver.title[:40] or 'ERROR' in driver.title or 'Przerwa techniczna' in driver.title:
-        print(driver.title)
-        time.sleep(20)
-        driver.refresh()
+    
+    heading = restore_listing_page(driver, target_path='//h1[@data-cy="search-listing.heading"]')
+    def page_no_from_heading(heading):
+        if 'Strona' == heading.text.split(' ')[0]:
+            actual_page_no = int(heading.text.split(' ')[1])
+        else:
+            assert 'Mieszkania' == heading.text.split(' ')[0]
+            actual_page_no = 1
+        return actual_page_no
+    actual_page_no = page_no_from_heading(heading)
+    
+    while actual_page_no != page_no:
+        print(f"Zamiast oczekiwanej strony {page_no} widzę stronę {actual_page_no}. Koryguję...")
+        if actual_page_no < page_no:
+            next_or_prev_button = restore_listing_page(driver, target_path='//li[@aria-label="Go to next Page"]')
+        else:
+            next_or_prev_button = restore_listing_page(driver, target_path='//li[@aria-label="Go to previous page"]')
+        driver.execute_script("arguments[0].click();", next_or_prev_button)
+        time.sleep(4)
+        heading = restore_listing_page(driver, target_path='//h1[@data-cy="search-listing.heading"]')
+        actual_page_no = page_no_from_heading(heading)
+    assert page_no == actual_page_no
+
     # scroll down the webpage to get all results
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
     time.sleep(1)
 
     promoted_article_list = process_promoted(driver)
-
-    heading = driver.find_element(by=By.XPATH, value='//h1[@data-cy="search-listing.heading"]')
-    if 'Strona' == heading.text.split(' ')[0]:
-        actual_page_no = int(heading.text.split(' ')[1])
-    else:
-        assert 'Mieszkania' == heading.text.split(' ')[0]
-        actual_page_no = 1
-    assert page_no == actual_page_no
-
     organic = driver.find_elements(by=By.XPATH, value='//div[@data-cy="search.listing.organic"]')[0]
     organic_article_list = organic.find_elements(by=By.XPATH, value='.//article[@data-cy="listing-item"]')
 
