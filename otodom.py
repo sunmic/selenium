@@ -548,8 +548,12 @@ def scrape(driver, ads, extra, g_scan, page_no):
                 address = "[missing]"  # !?
             det = article.find_elements(by=By.XPATH, value='.//section/div[2]/div[3]/dl')[0]
             item_title = article.find_elements(by=By.XPATH, value='.//p[@data-cy="listing-item-title"]')[0]
-            img = article.find_elements(by=By.XPATH, value='.//img[@data-cy="listing-item-image-source"]')[0]
-            photo = img.get_attribute('src')
+            img_l = article.find_elements(by=By.XPATH, value='.//img[@data-cy="listing-item-image-source"]')
+            if len(img_l) > 0:
+                img = img_l[0]
+                photo = img.get_attribute('src')
+            else:
+                photo = ''
             #use scraped data
             url = links[0].get_attribute('href')
             public_id = url.split("-")[-1][2:]
@@ -649,7 +653,7 @@ def scrape(driver, ads, extra, g_scan, page_no):
                         print('Poprzedni tytuł: ' + ad_as_article['title'])
                         del d['title']
                         if len(d) == 0:
-                            print('Pomijam nieistotną zmianę w tytule dla ', url)
+                            print(marker, 'Pomijam nieistotną zmianę w tytule dla', url)
                             continue
                     if price_updated:
                         print(f"--> Nastąpiła zmiana ceny z {prev_price} na {curr_price}!!!")
