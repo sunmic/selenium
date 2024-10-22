@@ -43,7 +43,7 @@ def handle_cosmos_throttling(lambda_function):
         try:
             return_value = lambda_function()
             lastRequestStatistics = mongo_db.command({"getLastRequestStatistics": 1})
-            if lastRequestStatistics["RequestCharge"] > 12:
+            if lastRequestStatistics["RequestCharge"] > 40:
                 print(inspect.getsource(lambda_function))
                 print("Last RU Consume:", lastRequestStatistics["RequestCharge"])
             return return_value
