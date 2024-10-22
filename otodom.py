@@ -33,6 +33,10 @@ mongo_db = mongo_client[MONGO_DB_NAME]
 USE_MONGO_DICT = ('y' == os.getenv('USE_MONGO_DICT', 'n'))
 
 def handle_cosmos_throttling(lambda_function):
+    if not 'cosmos.azure.com' in PRIMARY_CONNECTION_STRING:
+        return_value = lambda_function()
+        return return_value
+    
     import inspect
     repeat = True
     while repeat:
@@ -60,7 +64,7 @@ def handle_cosmos_throttling(lambda_function):
                 raise
             print('Ponawiam wykonanie przekazanej funkcji')
 
-
+# https://www.mongodb.com/community/forums/t/how-many-indexes-are-needed-for-a-count-query-to-be-effective/14614
 handle_cosmos_throttling(lambda : mongo_db['ad'].create_index({'entry_name' : 1}))
 handle_cosmos_throttling(lambda : mongo_db['ad'].create_index({'ad.publicId' : 1}))
 handle_cosmos_throttling(lambda : mongo_db['ad'].create_index({'ad.modifiedAt' : 1}))
@@ -392,21 +396,24 @@ def scrape_single(driver, ads, price_updated=False, article_updated=False):
     elif not is_expired:
         print("Missing cenoskop min/max prices!")
 
+def restore_listing_page(driver, target_path='//div[@data-cy="search.listing.promoted"]'):
+    target_l = driver.find_elements(by=By.XPATH, value=target_path)
+    while (len(target_l) == 0):
+        time.sleep(2)
+        print("--> Próba przywrócenia strony z wynikami (refresh/back) dla ", target_path)
+        print(driver.title, driver.current_url)
+        if '404' in driver.title[:40] or 'ERROR' in driver.title or 'Przerwa techniczna' in driver.title:
+            time.sleep(20)
+        if 'wyniki' in driver.current_url:
+            driver.refresh()
+        else:
+            driver.back()
+        target_l = driver.find_elements(by=By.XPATH, value=target_path)
+    target = target_l[0]
+    return target
+
 def process_promoted(driver):
-        promoted_l = driver.find_elements(by=By.XPATH, value='//div[@data-cy="search.listing.promoted"]')
-        while (len(promoted_l) == 0):
-            time.sleep(2)
-            print("--> Próba przywrócenia strony z wynikami (refresh/back)")
-            print(driver.current_url)
-            print(driver.title)
-            if 'ERROR' in driver.title or 'Przerwa techniczna' in driver.title:
-                time.sleep(20)
-            if 'wyniki' in driver.current_url:
-                driver.refresh()
-            else:
-                driver.back()
-            promoted_l = driver.find_elements(by=By.XPATH, value='//div[@data-cy="search.listing.promoted"]')
-        promoted = promoted_l[0]
+        promoted = restore_listing_page(driver, target_path='//div[@data-cy="search.listing.promoted"]')
         promoted_article_list = promoted.find_elements(by=By.XPATH, value='.//article[@data-cy="listing-item"]')
         # print('Promoted:', len(promoted_article_list))
         assert len(promoted_article_list) == 3
@@ -494,7 +501,7 @@ def ad_to_article_entry(ad):
     }
 
 # define main function
-def scrape(driver, ads, extra, g_scan):
+def scrape(driver, ads, extra, g_scan, page_no):
     while '404' in driver.title[:40] or 'ERROR' in driver.title or 'Przerwa techniczna' in driver.title:
         print(driver.title)
         time.sleep(20)
@@ -502,8 +509,16 @@ def scrape(driver, ads, extra, g_scan):
     # scroll down the webpage to get all results
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
     time.sleep(1)
-    
+
     promoted_article_list = process_promoted(driver)
+
+    heading = driver.find_element(by=By.XPATH, value='//h1[@data-cy="search-listing.heading"]')
+    if 'Strona' == heading.text.split(' ')[0]:
+        actual_page_no = int(heading.text.split(' ')[1])
+    else:
+        assert 'Mieszkania' == heading.text.split(' ')[0]
+        actual_page_no = 1
+    assert page_no == actual_page_no
 
     organic = driver.find_elements(by=By.XPATH, value='//div[@data-cy="search.listing.organic"]')[0]
     organic_article_list = organic.find_elements(by=By.XPATH, value='.//article[@data-cy="listing-item"]')
@@ -610,7 +625,8 @@ def scrape(driver, ads, extra, g_scan):
     if len(article_list) == 0:
         pass  # wymagana analiza sytuacji
 
-    for article in l_articles:
+    for idx, article in enumerate(l_articles):
+        marker = f'[p{page_no}/a{idx}/{len(l_articles)}]'
         try:
             pid = article['public_id']
             url = article['url']
@@ -651,12 +667,12 @@ def scrape(driver, ads, extra, g_scan):
                         time_since_cenoskop_accessed = datetime.now(tz=zoneinfo.ZoneInfo("Poland")) - extra_access_time
                         print(f'Refreshing cenoskop data after {time_since_cenoskop_accessed}')
                     else:
-                        print("Skipping url " + url)
+                        print(marker, "Skipping url " + url)
                         continue    
                 else:
-                    print("Skipping url " + url)
+                    print(marker, "Skipping url " + url)
                     continue
-            print(f"Following url {url}")
+            print(f"{marker} Following url {url}")
             driver.get(url)
             g_scan['visited_ids'].append(pid)
             scrape_single(driver=driver, ads=ads, price_updated=price_updated, article_updated=article_updated)
@@ -673,9 +689,8 @@ def scrape(driver, ads, extra, g_scan):
 
     # click on the next button
     time.sleep(2)
-    # next_button = driver.find_element(by=By.XPATH, value='//button[@data-cy="pagination.next-page"]')
-    # next_button = driver.find_element(by=By.XPATH, value='//li[@class="css-gd4dj2"]')
-    next_button = driver.find_element(by=By.XPATH, value='//li[@aria-label="Go to next Page"]')
+    # next_button = driver.find_element(by=By.XPATH, value='//li[@aria-label="Go to next Page"]')
+    next_button = restore_listing_page(driver, target_path='//li[@aria-label="Go to next Page"]')
     
     driver.execute_script("arguments[0].click();", next_button)
     time.sleep(4)
@@ -752,7 +767,7 @@ def otodom_main(driver, website):
     while i <= num_of_pages:
         print('Working on page ' + str(i) + ' of ' + str(num_of_pages))
         try:
-            scrape(driver, ads, extra, g_scan)
+            scrape(driver, ads, extra, g_scan, page_no=i)
         except Exception as e:
             # print error code
             print(e)
