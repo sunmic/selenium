@@ -600,7 +600,7 @@ def scrape(driver, ads, extra, g_scan, page_no):
                 if up_text_scraped:
                     up_text = up_text_el.text
                     up_ind = True
-                    expr = '(?P<day>\d\d)\.(?P<month>\d\d) o (?P<hour>\d\d)\:(?P<min>\d\d)'
+                    expr = r'(?P<day>\d\d)\.(?P<month>\d\d) o (?P<hour>\d\d)\:(?P<min>\d\d)'
                     match = re.search(expr, up_text)
                     up_datetime = datetime.fromisoformat(f"2024-{match.group('month')}-{match.group('day')}T{match.group('hour')}:{match.group('min')}")
                     up_id = f"{public_id}-{up_datetime.isoformat().replace(':', '_')}"
