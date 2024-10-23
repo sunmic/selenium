@@ -34,6 +34,12 @@ USE_MONGO_DICT = ('y' == os.getenv('USE_MONGO_DICT', 'n'))
 
 from collections import defaultdict
 ru_accounting = defaultdict(float)
+ru_command_accounting = defaultdict(float)
+
+def report_command_accounting():
+    print("Overall RU cost:")
+    for k, v in ru_command_accounting.items():
+        print(f'{k}: {v}')
 
 def handle_cosmos_throttling(lambda_function, accounting_label='unaccounted'):
     if not 'cosmos.azure.com' in PRIMARY_CONNECTION_STRING:
@@ -46,8 +52,11 @@ def handle_cosmos_throttling(lambda_function, accounting_label='unaccounted'):
         try:
             return_value = lambda_function()
             last_request_statistics = mongo_db.command({"getLastRequestStatistics": 1})
+            command_name = last_request_statistics["CommandName"]
             request_charge = last_request_statistics["RequestCharge"]
+            # print(accounting_label, command_name, request_charge)
             ru_accounting[accounting_label] += request_charge
+            ru_command_accounting[command_name] += request_charge
             if request_charge > 40:
                 print(inspect.getsource(lambda_function))
                 print("Last RU Consume:", request_charge)
@@ -161,7 +170,7 @@ if not os.path.exists(SCAN_DIR):
     os.makedirs(SCAN_DIR)
 
 def read_ads_ups(public_id=''):
-    ups = {}
+    ups = defaultdict(list)
 
     files = [file for file in os.listdir(UPS_DIR) if public_id in file]
     public_id_fun = lambda x : x.split('-')[1]
@@ -187,7 +196,7 @@ def read_ads_ups(public_id=''):
     return ups
 
 def read_ads_promo(public_id=''):
-    promo = {}
+    promo = defaultdict(list)
 
     files = [file for file in os.listdir(PROMO_DIR) if public_id in file]
     public_id_fun = lambda x : x.split('-')[1]
@@ -213,7 +222,7 @@ def read_ads_promo(public_id=''):
     return promo
 
 def read_ads_extra(public_id='', tz=datetime.now(timezone.utc).astimezone().tzinfo):
-    extra = {}
+    extra = defaultdict(list)
 
     files = [file for file in os.listdir(OTHER_DIR) if public_id in file]
     public_id_fun = lambda x : x.split('-')[1]
@@ -241,7 +250,7 @@ def read_ads_extra(public_id='', tz=datetime.now(timezone.utc).astimezone().tzin
 
 def read_ads_from_dir(public_id='', tz=datetime.now(timezone.utc).astimezone().tzinfo):
     print("Loading ads from directory.")
-    ads = {}
+    ads = defaultdict(list)
     ad_files = [file for file in os.listdir(ADS_DIR) if public_id in file]
     upd_files = [file for file in os.listdir(ADS_UPDATE_DIR) if public_id in file]
     expired_files = [file for file in os.listdir(EXPIRED_DIR) if public_id in file]
@@ -652,13 +661,16 @@ def scrape(driver, ads, extra, g_scan, page_no):
 
             price_updated = False
             article_updated = False
-            if pid in ads:
-                prev_price = ads[pid][-1]['ad']['target']['Price']
+
+            ads_for_pid = ads[pid]
+            if len(ads_for_pid) > 0: #pid in ads:
+                extra_for_pid = extra[pid]
+                prev_price = ads_for_pid[-1]['ad']['target']['Price']
                 curr_price = article['price']
                 price_updated = prev_price != curr_price
-                time_passed_since_accessed = datetime.now() - ads[pid][-1]['access_time']
-                time_passed_since_modified = datetime.now(tz=zoneinfo.ZoneInfo("Poland")) - datetime.fromisoformat(ads[pid][-1]['ad']['modifiedAt'])
-                ad_as_article = ad_to_article_entry(ads[pid][-1]['ad'])
+                time_passed_since_accessed = datetime.now() - ads_for_pid[-1]['access_time']
+                time_passed_since_modified = datetime.now(tz=zoneinfo.ZoneInfo("Poland")) - datetime.fromisoformat(ads_for_pid[-1]['ad']['modifiedAt'])
+                ad_as_article = ad_to_article_entry(ads_for_pid[-1]['ad'])
                 d = diff(ad_as_article, article)
                 del d['address']  # TBD
                 article_updated = len(d) > 0
@@ -672,15 +684,17 @@ def scrape(driver, ads, extra, g_scan, page_no):
                             continue
                     if price_updated:
                         print(f"--> Nastąpiła zmiana ceny z {prev_price} na {curr_price}!!!")
-                elif not pid in extra and time_passed_since_modified > timedelta(days=1) \
+                #elif not pid in extra \
+                elif len(extra_for_pid) == 0 \
+                    and time_passed_since_modified > timedelta(days=1) \
                     and time_passed_since_accessed > timedelta(hours=2):
                     print(f"Going for cenoskop min/max prices after {time_passed_since_modified}")
-                elif pid in extra:
-                    extra_access_time = extra[pid][-1]['access_time']
+                elif len(extra_for_pid) > 0: #pid in extra:
+                    extra_access_time = extra_for_pid[-1]['access_time']
                     if not extra_access_time.tzinfo:
                         extra_access_time = datetime.fromisoformat(extra_access_time.isoformat() + '+00:00')
                     if (\
-                    (extra_access_time < datetime.fromisoformat(ads[pid][-1]['ad']['modifiedAt']) + timedelta(days=2)\
+                    (extra_access_time < datetime.fromisoformat(ads_for_pid[-1]['ad']['modifiedAt']) + timedelta(days=2)\
                     and datetime.now(tz=zoneinfo.ZoneInfo("Poland")) > extra_access_time + timedelta(days=1))\
                     or datetime.now(tz=zoneinfo.ZoneInfo("Poland")) > extra_access_time + timedelta(days=7)):
                         time_since_cenoskop_accessed = datetime.now(tz=zoneinfo.ZoneInfo("Poland")) - extra_access_time
@@ -701,13 +715,16 @@ def scrape(driver, ads, extra, g_scan, page_no):
             #     process_promoted(driver)
             # except Exception as e:
             #     print("Błąd w process_promoted()", e, " dla ogłoszenia", url)
-            ru_cost = ru_accounting[pid]
-            print(f"RU cost for {pid}: {ru_cost}")
         except Exception as e:
             print("Błąd w scrape(2)", e , " dla ogłoszenia", url)
             print(driver.title)
             continue
+        finally:
+            ru_cost = ru_accounting[pid]
+            # print(f"RU cost for {pid}: {ru_cost}")
+            # report_command_accounting()
 
+    report_command_accounting()
     # click on the next button
     time.sleep(2)
     # next_button = driver.find_element(by=By.XPATH, value='//li[@aria-label="Go to next Page"]')
@@ -801,3 +818,4 @@ def otodom_main(driver, website):
     save_scan(g_scan)
 
     check_inactive(driver, ads, g_scan)
+    report_command_accounting()
