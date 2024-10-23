@@ -32,7 +32,10 @@ mongo_db = mongo_client[MONGO_DB_NAME]
 
 USE_MONGO_DICT = ('y' == os.getenv('USE_MONGO_DICT', 'n'))
 
-def handle_cosmos_throttling(lambda_function):
+from collections import defaultdict
+ru_accounting = defaultdict(float)
+
+def handle_cosmos_throttling(lambda_function, accounting_label='unaccounted'):
     if not 'cosmos.azure.com' in PRIMARY_CONNECTION_STRING:
         return_value = lambda_function()
         return return_value
@@ -42,10 +45,12 @@ def handle_cosmos_throttling(lambda_function):
     while repeat:
         try:
             return_value = lambda_function()
-            lastRequestStatistics = mongo_db.command({"getLastRequestStatistics": 1})
-            if lastRequestStatistics["RequestCharge"] > 40:
+            last_request_statistics = mongo_db.command({"getLastRequestStatistics": 1})
+            request_charge = last_request_statistics["RequestCharge"]
+            ru_accounting[accounting_label] += request_charge
+            if request_charge > 40:
                 print(inspect.getsource(lambda_function))
-                print("Last RU Consume:", lastRequestStatistics["RequestCharge"])
+                print("Last RU Consume:", request_charge)
             return return_value
         
         except Exception as e:
@@ -86,7 +91,7 @@ class MongoDict:
         # https://stackoverflow.com/questions/56988743/using-the-sort-cursor-method-without-the-default-indexing-policy-in-azure-cosm
 
     def __getitem__(self, key):
-        list = [x for x in handle_cosmos_throttling(lambda : self.collection.find({self.collection_key : key}, {'_id' : 0})).sort({'access_time' : 1})]
+        list = [x for x in handle_cosmos_throttling(lambda : self.collection.find({self.collection_key : key}, {'_id' : 0}), accounting_label=key).sort({'access_time' : 1})]
         return list
     
     def __len__(self):
@@ -94,7 +99,7 @@ class MongoDict:
     
     def __contains__(self, key):
         # return handle_cosmos_throttling(lambda : self.collection.find_one({self.collection_key: key})) is not None
-        return handle_cosmos_throttling(lambda : self.collection.count_documents({self.collection_key: key}, limit=1)) > 0
+        return handle_cosmos_throttling(lambda : self.collection.count_documents({self.collection_key: key}, limit=1), accounting_label=key) > 0
     
     def __iter__(self):
         return iter(handle_cosmos_throttling(lambda : self.collection.distinct(self.collection_key)))
@@ -309,7 +314,7 @@ def save_document_mongo(directory, name, content, key, tz=datetime.now(timezone.
                         'ad.modifiedAt' : document['ad']['modifiedAt'],
                         'directory' : document['directory']
                         }
-        if  handle_cosmos_throttling(lambda : mongo_db[key].count_documents(filter=count_filter, limit = 1)) > 0:
+        if  handle_cosmos_throttling(lambda : mongo_db[key].count_documents(filter=count_filter, limit = 1), accounting_label=document['ad']['publicId']) > 0:
             return
         
     handle_cosmos_throttling(lambda : mongo_db[key].insert_one(document=document))
@@ -447,15 +452,15 @@ def check_inactive(driver, ads, scan):
         ads.collection.create_index({'ad.target.City' : 1})
         ads.collection.create_index({'directory' : 1})
         ads.collection.create_index({'ad.target.City' : 1, 'directory' : 1})
-        city_ids = [ad['ad']['publicId'] for ad in ads.collection.find({'ad.target.City' : city}, 
-                                                                       {'ad.publicId' : 1})]
-        expired_ids = [ad['ad']['publicId'] for ad in ads.collection.find({'ad.target.City' : city,
-                                                                           'directory' : EXPIRED_DIR.split('/')[-1]},
-                                                                           {'ad.publicId' : 1})]
-        primary_ids = [ad['ad']['publicId'] for ad in ads.collection.find({'ad.target.City' : city,
-                                                                           'ad.market' : 'PRIMARY'
-                                                                           }, 
-                                                                       {'ad.publicId' : 1})]
+        city_ids = [ad['ad']['publicId'] for ad in handle_cosmos_throttling(lambda : ads.collection.find({'ad.target.City' : city},
+                                                                                                         {'ad.publicId' : 1}))]
+        expired_ids = [ad['ad']['publicId'] for ad in handle_cosmos_throttling(lambda : ads.collection.find({'ad.target.City' : city,
+                                                                                                             'directory' : EXPIRED_DIR.split('/')[-1]},
+                                                                                                             {'ad.publicId' : 1}))]
+        primary_ids = [ad['ad']['publicId'] for ad in handle_cosmos_throttling(lambda : ads.collection.find({'ad.target.City' : city,
+                                                                                                             'ad.market' : 'PRIMARY'
+                                                                                                             },
+                                                                                                             {'ad.publicId' : 1}))]
     else:
         city_ids = [k for (k,v) in ads.items() if v[-1]['ad']['target']['City'] == city]
         public_id_fun = lambda x : x.split('-')[1]
@@ -696,6 +701,8 @@ def scrape(driver, ads, extra, g_scan, page_no):
             #     process_promoted(driver)
             # except Exception as e:
             #     print("Błąd w process_promoted()", e, " dla ogłoszenia", url)
+            ru_cost = ru_accounting[pid]
+            print(f"RU cost for {pid}: {ru_cost}")
         except Exception as e:
             print("Błąd w scrape(2)", e , " dla ogłoszenia", url)
             print(driver.title)
