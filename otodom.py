@@ -819,3 +819,16 @@ def otodom_main(driver, website):
 
     check_inactive(driver, ads, g_scan)
     report_command_accounting()
+
+def scrape_single_standalone(url):
+    print(url)
+
+    driver = gen_driver()
+    driver.get(url)
+
+    ads = MongoDict('ad')
+    scrape_single(driver, ads=ads)
+
+    report_command_accounting()
+
+    driver.quit()

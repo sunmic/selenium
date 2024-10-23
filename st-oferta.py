@@ -27,6 +27,9 @@ else:
 def reload_callback():
     st.cache_resource.clear()
 
+def scrape_single_callback(url):
+    scrape_single_standalone(url)
+
 def f_expired(public_id):
     return ads[public_id][-1]['expired']
 
@@ -96,12 +99,14 @@ with st.sidebar:
     print(f'{123456}')
     st.write(f'{123456}')
 
-idx = cenoskop_idx(geo=geo)
+# idx = cenoskop_idx(geo=geo)
 url = ''
 if 'url' in st.query_params:
     url = st.query_params['url']
 else:
-    url = st.text_input("Url:")
+    col1, col2 = st.columns([7, 1])
+    url = col1.text_input("Url:")
+    visit_now = col2.button('Refresh', on_click=lambda : scrape_single_callback(url))
 
 with st.sidebar:
     col1, col2 = st.columns([1, 2])
@@ -110,15 +115,15 @@ with st.sidebar:
     with col2:
         st.write(len(ads))
     
-    for i in range(min(25, len(idx))):
-        col1, col2 = st.columns([4, 1])
-        col1.write(f"{round(idx[i]['cenoskop_idx'],2)} \
-                   {idx[i]['price']/1000}k \
-                   {idx[i]['area']}m2 \
-                   {idx[i]['price_per_m']/1000}k/m2"
-                   )
-        if col2.button("Go", key=f"but_{i}"):
-            url=idx[i]['public_id']
+    # for i in range(min(25, len(idx))):
+    #     col1, col2 = st.columns([4, 1])
+    #     col1.write(f"{round(idx[i]['cenoskop_idx'],2)} \
+    #                {idx[i]['price']/1000}k \
+    #                {idx[i]['area']}m2 \
+    #                {idx[i]['price_per_m']/1000}k/m2"
+    #                )
+    #     if col2.button("Go", key=f"but_{i}"):
+    #         url=idx[i]['public_id']
         
 
 def oto_diff(a, b):
